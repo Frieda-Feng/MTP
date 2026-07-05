@@ -197,6 +197,8 @@ def plot_method_bars(stats, path):
     axes[0].set_title('收敛轮数')
     axes[1].bar(x, errs, color=colors)
     axes[1].set_xticks(x); axes[1].set_xticklabels(names, rotation=15)
+    # symlog：让 Jacobi/GS(≈1e-6) 与直接法(0) 的柱子都可见
+    axes[1].set_yscale('symlog', linthresh=1e-9)
     axes[1].set_ylabel('最终步差')
     axes[1].set_title('收敛误差')
     axes[2].bar(x, times, color=colors)
@@ -255,3 +257,120 @@ def make_direct_gif(x_final, n, T_top, title, path, fps=2):
     """两帧：初值全 0 → 最终解。"""
     zero = np.zeros(n*n)
     make_iter_gif([zero, x_final], n, T_top, title, path, fps=fps)
+
+
+# ────────────────────────────────────────────────────────────────────
+# main：端到端串联
+# 流水线：建模（1D n=5 + 2D 2×2 + 2D 30×30）→ 三方法求解（含计时）
+#         → 6 张静态图 + 3 张 GIF → 终端打印报告
+# ────────────────────────────────────────────────────────────────────
+def main():
+    import os
+    import time
+
+    out_dir = os.path.join(os.path.dirname(__file__), 'output')
+    os.makedirs(out_dir, exist_ok=True)
+
+    print('=' * 64)
+    print('任务一：迭代法解稳态热传导 Ax=b')
+    print('=' * 64)
+
+    # ── 1. 建模 ────────────────────────────────────────────────────
+    print('\n[1/5] 建模')
+    # 铁棍 n=5 内部点，两端 100°C / 0°C
+    A1, b1 = build_1d(n=5, T_left=100, T_right=0)
+    # 铁板 2×2，上边 100°C，其余 0°C（最小可见样例）
+    A2_2, b2_2 = build_2d(n=2, T_top=100, T_others=0)
+    # 铁板 30×30（主算例，用于误差曲线 / 谱半径 / GIF）
+    N = 30
+    A, b = build_2d(n=N, T_top=100, T_others=0)
+    print(f'  铁棍 1D n=5        : A{A1.shape}')
+    print(f'  铁板 2D 2×2        : A{A2_2.shape}')
+    print(f'  铁板 2D {N}×{N}        : A{A.shape}')
+
+    # ── 2. 三方法求解（计时）──────────────────────────────────────
+    print('\n[2/5] 求解（Jacobi / Gauss-Seidel / 直接法）')
+    x0_big = np.zeros(N * N)
+
+    t0 = time.perf_counter()
+    x_j, err_j, snaps_j = jacobi(A, b, x0_big, snapshot_every=50)
+    t_j = (time.perf_counter() - t0) * 1000
+
+    t0 = time.perf_counter()
+    x_g, err_g, snaps_g = gauss_seidel(A, b, x0_big, snapshot_every=50)
+    t_g = (time.perf_counter() - t0) * 1000
+
+    t0 = time.perf_counter()
+    x_d = solve_direct(A, b)
+    t_d = (time.perf_counter() - t0) * 1000
+
+    # 真误差：迭代解 vs 直接解（裁判）最大偏差
+    true_err_j = float(np.max(np.abs(x_j - x_d)))
+    true_err_g = float(np.max(np.abs(x_g - x_d)))
+
+    stats = {
+        'Jacobi':       (len(err_j), float(err_j[-1]), t_j),
+        'Gauss-Seidel': (len(err_g), float(err_g[-1]), t_g),
+        '直接法':        (0, 0.0, t_d),
+    }
+    print(f"  Jacobi      : {len(err_j):4d} 轮, 步差={err_j[-1]:.2e}, "
+          f"真误差={true_err_j:.2e}, 耗时={t_j:.1f} ms")
+    print(f"  Gauss-Seidel: {len(err_g):4d} 轮, 步差={err_g[-1]:.2e}, "
+          f"真误差={true_err_g:.2e}, 耗时={t_g:.1f} ms")
+    print(f"  直接法       :    0 轮, 真误差=0（裁判基准）, 耗时={t_d:.1f} ms")
+
+    # ── 3. 6 张静态图 ──────────────────────────────────────────────
+    print('\n[3/5] 生成 6 张静态图')
+    # 直接解作为裁判
+    x_rod = solve_direct(A1, b1)
+    x_2x2 = solve_direct(A2_2, b2_2)
+
+    plot_rod(x_rod, os.path.join(out_dir, 'fig1_rod.png'))
+    plot_matrix_and_bars(A2_2, x_2x2, os.path.join(out_dir, 'fig2_matrix.png'))
+    plot_heatmap_compare(x_j, x_d, N, os.path.join(out_dir, 'fig3_heatmap.png'))
+    plot_error_curve(err_j, err_g, os.path.join(out_dir, 'fig4_error.png'))
+    plot_method_bars(stats, os.path.join(out_dir, 'fig5_bars.png'))
+
+    # 发散反例（brief 笔误修正：jacobi 第 3 个位置参数 x0 不能漏）
+    A_div = np.array([[1, 2], [2, 1]], dtype=float)
+    _, err_div, _ = jacobi(A_div, np.array([1., 1.]), np.zeros(2), max_iter=30)
+    plot_divergence(err_div, os.path.join(out_dir, 'fig6_diverge.png'))
+    print('  ✓ fig1–fig6 已写入 output/')
+
+    # ── 4. 3 张 GIF ────────────────────────────────────────────────
+    print('\n[4/5] 生成 3 张 GIF')
+    make_iter_gif(snaps_j, N, 100, 'Jacobi 迭代过程',
+                  os.path.join(out_dir, 'jacobi.gif'), fps=8)
+    make_iter_gif(snaps_g, N, 100, 'Gauss-Seidel 迭代过程',
+                  os.path.join(out_dir, 'gauss_seidel.gif'), fps=8)
+    make_direct_gif(x_d, N, 100, '直接解（一帧到位）',
+                    os.path.join(out_dir, 'direct.gif'), fps=2)
+    print('  ✓ jacobi.gif / gauss_seidel.gif / direct.gif 已写入 output/')
+
+    # ── 5. 终端报告 ────────────────────────────────────────────────
+    print('\n[5/5] 报告')
+    print('-' * 64)
+    print('收敛轮数')
+    print(f'  Jacobi       : {len(err_j)} 轮')
+    print(f'  Gauss-Seidel : {len(err_g)} 轮  （约为 Jacobi 的 '
+          f'{len(err_g)/len(err_j):.1%}）')
+    print('\n谱半径（迭代矩阵收敛速率，越小越快；< 1 才收敛）')
+    rho_j_theory = float(np.cos(np.pi / (N + 1)))         # cos(π/31)
+    rho_g_theory = rho_j_theory ** 2                       # ρ_J²
+    rho_j_call = spectral_radius_jacobi(N)
+    rho_g_call = spectral_radius_gs(N)
+    print(f'  ρ_J  理论 cos(π/31)     = {rho_j_theory:.6f}')
+    print(f'       spectral_radius_* = {rho_j_call:.6f}')
+    print(f'  ρ_GS 理论 cos²(π/31)   = {rho_g_theory:.6f}')
+    print(f'       spectral_radius_* = {rho_g_call:.6f}')
+    print('\n真误差（迭代解 vs 直接解，max 偏差）')
+    print(f'  Jacobi       : {true_err_j:.2e}  '
+          f'(理论 tol/(1−ρ_J) ≈ {1e-6/(1-rho_j_theory):.2e})')
+    print(f'  Gauss-Seidel : {true_err_g:.2e}  '
+          f'(理论 tol/(1−ρ_GS) ≈ {1e-6/(1-rho_g_theory):.2e})')
+    print('\n输出文件：6 PNG + 3 GIF，共 9 个，位于 output/')
+    print('=' * 64)
+
+
+if __name__ == '__main__':
+    main()
