@@ -1,3 +1,32 @@
+# Python 字节码与缓存
+__pycache__/
+*.py[cod]
+*$py.class
+
+# Python 打包/构建产物
+*.egg-info/
+build/
+dist/
+
+# 测试 / 类型检查缓存
+.pytest_cache/
+.mypy_cache/
+.ruff_cache/
+
+# Jupyter
+.ipynb_checkpoints/
+
+# 日志
+*.log
+
+# uv 虚拟环境
+.venv/
+
+# superpowers SDD 临时工作区（brief/report/diff/ledger）
+.superpowers/
+
+# macOS
+.DS_Store
 __pycache__
 .pytest_cache
 .venv/
