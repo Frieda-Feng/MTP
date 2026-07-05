@@ -97,7 +97,7 @@ mission3/
 
 ## 可复现性
 
-固定随机种子（`np.random.default_rng(42)`）。重跑 `run_all` 产出的 `experiments.json` 与各 PNG **字节级一致**（已验证 md5 不变）。`python -m pytest mission3/tests/` 8/8 全绿。
+固定随机种子（`np.random.default_rng(42)`）：`experiments.json` 数值结果可逐字复现；5 张 PNG 在相同 Python / matplotlib / 字体环境下亦可字节级复现（已验证 md5 不变）。`python -m pytest mission3/tests/` 8/8 全绿。
 
 ## AI 使用声明
 
