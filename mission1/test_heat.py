@@ -2,6 +2,7 @@ import numpy as np
 from numpy.testing import assert_allclose
 from heat import build_1d, build_2d, solve_direct
 from heat import jacobi, gauss_seidel
+from heat import spectral_radius_jacobi, spectral_radius_gs
 
 def test_build_2d_2x2():
     A, b = build_2d(2, 100, 0)
@@ -49,6 +50,11 @@ def test_iter_converge_30_and_gs_faster():
     assert_allclose(xg, xd, atol=5e-4)
     assert len(eg) < len(ej)          # GS 收敛更快
     assert len(sj) > 0 and len(sg) > 0
+
+def test_spectral_radius():
+    # ρ_J(Jacobi 迭代矩阵) = cos(π/(n+1))；ρ_GS = ρ_J²（5 点差分模型问题）
+    assert_allclose(spectral_radius_jacobi(30), np.cos(np.pi/31), atol=1e-12)
+    assert_allclose(spectral_radius_gs(30), spectral_radius_jacobi(30)**2, atol=1e-12)
 
 def _run_all():
     for name, fn in sorted(globals().items()):
