@@ -31,6 +31,18 @@ def test_jacobi_2x2():
 def test_iter_converge_30_and_gs_faster():
     A, b = build_2d(30, 100, 0)
     xd = solve_direct(A, b)
+    # ── 关于 atol=5e-4 的数学说明（迭代停止条件 vs 真误差）────────────
+    # tol=1e-6 是「步差」停止条件：‖x_{k+1} − x_k‖∞ < 1e-6 即停，它
+    # 不是「与真解的偏差」。线性收敛迭代法的真误差上界为：
+    #     ‖x_k − x*‖∞ ≤ tol / (1 − ρ)，其中 ρ 为迭代矩阵谱半径。
+    # 30×30 铁板（5 点差分）：
+    #   - Jacobi 谱半径 ρ_J = cos(π/(n+1)) = cos(π/31) ≈ 0.9949
+    #     → 真误差 ≈ 1e-6 / (1 − 0.9949) ≈ 1.95e-4（实测吻合）
+    #   - Gauss-Seidel 谱半径 ρ_GS = ρ_J² ≈ 0.9898
+    #     → 真误差 ≈ 1e-6 / 0.0102 ≈ 9.8e-5（更小，但这里同样用 5e-4 保持一致）
+    # 故 Jacobi 在 tol=1e-6 下与直接解最大偏差约 2e-4，atol 取 5e-4 留约 2.5× 余量。
+    # 若要真误差 < 1e-6，需把 tol 收紧到约 5e-9（30×30 多迭代约 1200 轮）。
+    # ────────────────────────────────────────────────────────────────
     xj, ej, sj = jacobi(A, b, np.zeros(900), snapshot_every=50)
     xg, eg, sg = gauss_seidel(A, b, np.zeros(900), snapshot_every=50)
     assert_allclose(xj, xd, atol=5e-4)   # 迭代停止 tol=1e-6 → 真解偏差 ~1.9e-4，留余量
