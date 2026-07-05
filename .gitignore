@@ -1,0 +1,12 @@
+# Python 字节码与缓存
+__pycache__/
+*.py[cod]
+
+# uv 虚拟环境
+.venv/
+
+# superpowers SDD 临时工作区（brief/report/diff/ledger）
+.superpowers/
+
+# macOS
+.DS_Store
